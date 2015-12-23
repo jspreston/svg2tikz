@@ -283,6 +283,15 @@ FIG_TEMPLATE = r"""
 \end{tikzpicture}
 """
 
+RAW_TEMPLATE = r"""
+%% color code
+%(colorcode)s
+%% main code
+\begin{scope}[y=0.80pt, x=0.80pt, yscale=-%(scale)f, xscale=%(scale)f, inner sep=0pt, outer sep=0pt%(extraoptions)s]
+%(pathcode)s
+\end{scope}
+"""
+
 SCALE = 'scale'
 DICT = 'dict'
 DIMENSION = 'dimension'
@@ -684,6 +693,8 @@ class TikZPathExporter(inkex.Effect):
                           choices=('output', 'effect', 'cli'), help="Extension mode (effect default)")
         self._add_booloption(parser, '--notext', dest='ignore_text', default=False,
                              help="Ignore all text")
+        self._add_booloption(parser, '--textascoord', dest='textascoord', default=False,
+                             help="turn text into named coordinates")
         if not self.inkscape_mode:
             parser.add_option('--standalone', dest='codeoutput',
                               action='store_const', const='standalone',
@@ -1093,16 +1104,21 @@ class TikZPathExporter(inkex.Effect):
         if self.options.ignore_text:
             return None, []
         raw_textstr = self.get_text(node).strip()
+        if self.options.textascoord:
+            cmdstr = 'COORD'
+        else:
+            cmdstr = 'TXT'
         if self.options.texmode == 'raw':
             textstr = raw_textstr
         elif self.options.texmode == 'math':
             textstr = "$%s$" % raw_textstr
         else:
             textstr = escape_texchars(raw_textstr)
+            
 
         x = self.unittouu(node.get('x', '0'))
         y = self.unittouu(node.get('y', '0'))
-        p = [('M', [x, y]), ('TXT', textstr)]
+        p = [('M', [x, y]), (cmdstr, textstr)]
         return p, []
 
     def _handle_use(self, node, graphics_state, accumulated_state=None):
@@ -1213,6 +1229,8 @@ class TikZPathExporter(inkex.Effect):
                 pass
             elif cmd == 'TXT':
                 s += " node[above right] (%s) {%s}" % (node_id, params)
+            elif cmd == 'COORD':
+                s += " coordinate (%s)" % (params)
             # Shapes
             elif cmd == 'rect':
                 s += "(%s,%s) rectangle (%s,%s)" % tparams
@@ -1345,9 +1363,12 @@ class TikZPathExporter(inkex.Effect):
                                          extraoptions=extraoptions,
                                          gradientcode=self.gradient_code,
                                          scale=self.options.scale)
-        else:
-            output = s
-
+        else:  # raw
+            output = RAW_TEMPLATE % dict(pathcode=s, colorcode=self.color_code,
+                                         extraoptions=extraoptions,
+                                         gradientcode=self.gradient_code,
+                                         scale=self.options.scale)
+            
         self.output_code = output
         if self.options.returnstring:
             return output
